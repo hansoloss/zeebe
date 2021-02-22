@@ -44,29 +44,12 @@ public final class JournalRecordReaderUtil {
 
     try {
       // Read the length of the record.
-      final int length = buffer.getInt();
 
-      // If the buffer length is zero then return.
-      if (length <= 0 || length > maxEntrySize) {
+      final JournalRecord record = serializer.read(buffer);
+      if (expectedIndex != record.index()) {
         buffer.reset();
         return null;
       }
-
-      final ByteBuffer slice = buffer.slice();
-      slice.limit(length);
-
-      // If the stored checksum equals the computed checksum, return the record.
-      slice.rewind();
-      final JournalRecord record = serializer.read(slice);
-      final var checksum = record.checksum();
-      // TODO: checksum should also include asqn.
-      // TODO: It is now copying the data to calculate the checksum. This should be fixed.
-      final var expectedChecksum = checksumGenerator.compute(record.data());
-      if (checksum != expectedChecksum || expectedIndex != record.index()) {
-        buffer.reset();
-        return null;
-      }
-      buffer.position(buffer.position() + length);
       buffer.mark();
       return record;
 
