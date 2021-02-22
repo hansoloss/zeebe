@@ -13,37 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.zeebe.journal;
+package io.zeebe.journal.file.record;
 
-import org.agrona.DirectBuffer;
+import io.zeebe.journal.JournalRecord;
+import java.nio.ByteBuffer;
 
-public interface JournalRecord {
+public final class SBESerializer implements JournalRecordBufferWriter, JournalRecordBufferReader {
 
-  /**
-   * Index of the record
-   *
-   * @return index
-   */
-  long index();
+  public JournalRecord read(final ByteBuffer buffer) {
+    return new PersistedJournalRecord(buffer);
+  }
 
-  /**
-   * Application sequence number for the record
-   *
-   * @return asqn
-   */
-  long asqn();
-
-  /**
-   * Checksum of the data
-   *
-   * @return checksum
-   */
-  long checksum();
-
-  /**
-   * Application provided data of the record
-   *
-   * @return data
-   */
-  DirectBuffer data();
+  public void write(final JournalRecord record, final ByteBuffer buffer) {}
 }

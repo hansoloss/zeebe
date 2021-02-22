@@ -1,77 +1,62 @@
-/*
- * Copyright © 2017 camunda services GmbH (info@camunda.com)
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.zeebe.journal.file.record;
 
-import com.google.common.base.Objects;
 import io.zeebe.journal.JournalRecord;
+import java.nio.ByteBuffer;
 import org.agrona.DirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 
-/** Journal Record */
-public final class PersistedJournalRecord implements JournalRecord {
+public class PersistedJournalRecord implements JournalRecord {
+  final PersistedJournalRecordMetadata metadata;
+  final PersistedIndexedRecord record;
 
-  private final DirectBuffer data;
-  private final long index;
-  private final long asqn;
-  private final int checksum;
+  public PersistedJournalRecord(final DirectBuffer buffer) {
+    metadata = new PersistedJournalRecordMetadata(buffer);
+    final var metadataLength = metadata.getLength();
+    record =
+        new PersistedIndexedRecord(
+            new UnsafeBuffer(buffer, metadataLength, buffer.capacity() - metadataLength));
+  }
 
-  public PersistedJournalRecord(
-      final long index, final long asqn, final int checksum, final DirectBuffer data) {
-    this.index = index;
-    this.asqn = asqn;
-    this.checksum = checksum;
-    this.data = data;
+  public PersistedJournalRecord(final ByteBuffer buffer) {
+    metadata = new PersistedJournalRecordMetadata(new UnsafeBuffer(buffer));
+    final var metadataLength = metadata.getLength();
+    buffer.position(metadataLength);
+    record = new PersistedIndexedRecord(new UnsafeBuffer(buffer.slice()));
+  }
+
+  public int getMetadataLength() {
+    return metadata.getLength();
+  }
+
+  public int getIndexedRecordLength() {
+    return record.getLength();
   }
 
   @Override
   public long index() {
-    return index;
+    return record.index();
   }
 
   @Override
   public long asqn() {
-    return asqn;
+    return record.asqn();
   }
 
   @Override
-  public int checksum() {
-    return checksum;
+  public long checksum() {
+    return metadata.checksum();
   }
 
   @Override
   public DirectBuffer data() {
-    return data;
+    return record.data();
   }
 
-  @Override
-  public boolean equals(final Object o) {
-    if (o == this) {
-      return true;
-    } else if (o == null || !o.getClass().equals(this.getClass())) {
-      return false;
-    }
-
-    final PersistedJournalRecord other = (PersistedJournalRecord) o;
-    return this.asqn == other.asqn
-        && this.checksum == other.checksum
-        && this.index == other.index
-        && this.data.equals(other.data);
+  public long computeChecksum() {
+    return -1;
   }
 
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(asqn, checksum, index, data);
+  public int getLength() {
+    return metadata.getLength() + record.getLength();
   }
 }
