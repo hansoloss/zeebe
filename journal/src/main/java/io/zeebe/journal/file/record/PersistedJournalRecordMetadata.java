@@ -42,9 +42,9 @@ final class PersistedJournalRecordMetadata {
   }
 
   public void wrap(final DirectBuffer buffer, final int offset, final int length) {
-    if (!canRead(buffer, 0)) {
+    /*if (!canRead(buffer, 0)) {
       throw new RuntimeException("Cannot read buffer"); // TODO
-    }
+    }*/
     headerDecoder.wrap(buffer, offset);
     decoder.wrap(
         buffer,

@@ -13,28 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.zeebe.journal.file.record;
+package io.zeebe.journal.file;
 
 import io.zeebe.journal.JournalRecord;
 import org.agrona.DirectBuffer;
 
-public class PersistableJournalRecord implements JournalRecord {
+public class TestJournalRecord implements JournalRecord {
 
-  final long index;
-  final long asqn;
-  final DirectBuffer data;
-  final PersistableJournalRecordMetadata metadata = new PersistableJournalRecordMetadata();
-  final PersistableIndexedRecord record;
+  private final long index;
+  private final long asqn;
+  private final long checksum;
+  private final DirectBuffer data;
 
-  public PersistableJournalRecord(final long index, final long asqn, final DirectBuffer data) {
+  public TestJournalRecord(
+      final long index, final long asqn, final long checksum, final DirectBuffer data) {
     this.index = index;
     this.asqn = asqn;
+    this.checksum = checksum;
     this.data = data;
-    record = new PersistableIndexedRecord(index, asqn, data);
-  }
-
-  public int getLength() {
-    return metadata.getLength() + record.getLength();
   }
 
   @Override
@@ -49,7 +45,7 @@ public class PersistableJournalRecord implements JournalRecord {
 
   @Override
   public long checksum() {
-    return -1;
+    return checksum;
   }
 
   @Override

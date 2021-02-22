@@ -17,13 +17,12 @@
 package io.zeebe.journal.file;
 
 import io.zeebe.journal.JournalRecord;
-import io.zeebe.journal.StorageException;
 import io.zeebe.journal.StorageException.InvalidChecksum;
 import io.zeebe.journal.StorageException.InvalidIndex;
 import io.zeebe.journal.file.record.JournalRecordBufferWriter;
 import io.zeebe.journal.file.record.JournalRecordReaderUtil;
-import io.zeebe.journal.file.record.KryoSerializer;
-import io.zeebe.journal.file.record.PersistedJournalRecord;
+import io.zeebe.journal.file.record.PersistableJournalRecord;
+import io.zeebe.journal.file.record.SBESerializer;
 import java.nio.BufferOverflowException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -43,7 +42,7 @@ class MappedJournalSegmentWriter {
   private final JournalRecordReaderUtil recordUtil;
   private final int maxEntrySize;
   private final ChecksumGenerator checksumGenerator = new ChecksumGenerator();
-  private final JournalRecordBufferWriter serializer = new KryoSerializer();
+  private final JournalRecordBufferWriter serializer = new SBESerializer(checksumGenerator);
 
   MappedJournalSegmentWriter(
       final JournalSegmentFile file,
@@ -52,7 +51,7 @@ class MappedJournalSegmentWriter {
       final JournalIndex index) {
     this.segment = segment;
     this.maxEntrySize = maxEntrySize;
-    recordUtil = new JournalRecordReaderUtil(maxEntrySize);
+    recordUtil = new JournalRecordReaderUtil();
     this.index = index;
     firstIndex = segment.index();
     buffer = mapFile(file, segment);
@@ -106,7 +105,16 @@ class MappedJournalSegmentWriter {
     }
 
     final int recordStartPosition = buffer.position();
-    lastEntry = write(buffer, record);
+    final var recordWritten = write(buffer, record);
+    if (record.checksum() != recordWritten.checksum()) {
+      buffer.position(recordStartPosition);
+      // To invalidate already written entry
+      buffer.putInt(0);
+      buffer.putInt(0);
+      buffer.position(recordStartPosition);
+      throw new InvalidChecksum("Checksum does not match");
+    }
+    lastEntry = recordWritten;
     index.index(lastEntry, recordStartPosition);
   }
 
@@ -118,15 +126,8 @@ class MappedJournalSegmentWriter {
   private JournalRecord write(
       final ByteBuffer buffer, final long index, final long asqn, final DirectBuffer data) {
 
-    // compute checksum and construct the record
-    // TODO: checksum should also include asqn. https://github.com/zeebe-io/zeebe/issues/6218
-    // TODO: It is now copying the data to calculate the checksum. This should be fixed when
-    // we change the serialization format. https://github.com/zeebe-io/zeebe/issues/6219
-    final var checksum = checksumGenerator.compute(data);
-    final var recordToWrite = new PersistedJournalRecord(index, asqn, checksum, data);
-
-    writeInternal(buffer, recordToWrite);
-    return recordToWrite;
+    final var recordToWrite = new PersistableJournalRecord(index, asqn, data);
+    return writeInternal(buffer, recordToWrite);
   }
 
   /**
@@ -134,43 +135,25 @@ class MappedJournalSegmentWriter {
    * advanced to a position were the next record will be written.
    */
   private JournalRecord write(final ByteBuffer buffer, final JournalRecord record) {
-    final var checksum = checksumGenerator.compute(record.data());
-    if (checksum != record.checksum()) {
-      throw new InvalidChecksum("Checksum invalid for record " + record);
-    }
-    writeInternal(buffer, record);
-    return record;
+    return writeInternal(buffer, record);
   }
 
-  private void writeInternal(final ByteBuffer buffer, final JournalRecord recordToWrite) {
+  private JournalRecord writeInternal(final ByteBuffer buffer, final JournalRecord recordToWrite) {
     final int recordStartPosition = buffer.position();
-    buffer.mark();
-    if (recordStartPosition + Integer.BYTES > buffer.limit()) {
-      throw new BufferOverflowException();
-    }
-
-    buffer.position(recordStartPosition + Integer.BYTES);
+    buffer.position(recordStartPosition);
+    final JournalRecord recordWritten;
     try {
-      serializer.write(recordToWrite, buffer);
+      recordWritten = serializer.write(recordToWrite, buffer);
     } catch (final BufferOverflowException e) {
-      buffer.reset();
+      buffer.position(recordStartPosition);
+      // To invalidate already written entry
+      buffer.putInt(0);
+      buffer.putInt(0);
+      buffer.position(recordStartPosition);
       throw e;
     }
 
-    final int length = buffer.position() - (recordStartPosition + Integer.BYTES);
-
-    // If the entry length exceeds the maximum entry size then throw an exception.
-    if (length > maxEntrySize) {
-      // Just reset the buffer. There's no need to zero the bytes since we haven't written the
-      // length or checksum.
-      buffer.reset();
-      throw new StorageException.TooLarge(
-          "Entry size " + length + " exceeds maximum allowed bytes (" + maxEntrySize + ")");
-    }
-
-    buffer.position(recordStartPosition);
-    buffer.putInt(length);
-    buffer.position(recordStartPosition + Integer.BYTES + length);
+    return recordWritten;
   }
 
   private void reset(final long index) {
@@ -189,6 +172,7 @@ class MappedJournalSegmentWriter {
         }
         lastEntry = nextEntry;
         nextIndex++;
+        buffer.mark();
       }
     } catch (final BufferUnderflowException e) {
       // Reached end of the segment

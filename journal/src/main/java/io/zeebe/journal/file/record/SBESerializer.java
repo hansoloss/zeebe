@@ -30,13 +30,27 @@ public final class SBESerializer implements JournalRecordBufferWriter, JournalRe
     this.checksumGenerator = checksumGenerator;
   }
 
+  @Override
   public JournalRecord read(final ByteBuffer buffer) {
-    final var record = new PersistedJournalRecord(buffer);
-    record.computeChecksum()
-
+    final var recordPosition = buffer.position();
+    try {
+      final var record = new PersistedJournalRecord(buffer);
+      buffer.position(recordPosition + record.getMetadataLength());
+      final var expectedChecksum = computeChecksum(buffer, record.getIndexedRecordLength());
+      if (record.checksum() != expectedChecksum) {
+        buffer.position(recordPosition);
+        return null; // TODO: throw an exception??
+      }
+      buffer.position(recordPosition + record.getLength());
+      return record;
+    } catch (final Exception e) {
+      buffer.position(recordPosition);
+      return null;
+    }
   }
 
-  public void write(final JournalRecord record, final ByteBuffer buffer) {
+  @Override
+  public JournalRecord write(final JournalRecord record, final ByteBuffer buffer) {
     final int recordStartPosition = buffer.position();
     buffer.mark();
 
@@ -59,16 +73,20 @@ public final class SBESerializer implements JournalRecordBufferWriter, JournalRe
     }*/
 
     final MutableDirectBuffer bufferToWrite = new UnsafeBuffer();
-    bufferToWrite.wrap(
-        buffer, buffer.position() + recordMetadata.getLength(), indexedRecord.getLength());
+    buffer.position(recordStartPosition + recordMetadata.getLength());
+    bufferToWrite.wrap(buffer, buffer.position(), indexedRecord.getLength());
     indexedRecord.write(bufferToWrite, 0);
     buffer.position(recordStartPosition + recordMetadata.getLength());
     final long checksum = computeChecksum(buffer, indexedRecord.getLength());
     recordMetadata.setChecksum(checksum);
     buffer.position(recordStartPosition);
-    bufferToWrite.wrap(buffer, buffer.position(), recordLength);
+    bufferToWrite.wrap(buffer, recordStartPosition, recordLength);
     recordMetadata.write(bufferToWrite, 0);
+
+    buffer.position(recordStartPosition);
+    final var recordWritten = new PersistedJournalRecord(buffer);
     buffer.position(recordStartPosition + recordLength);
+    return recordWritten;
   }
 
   private long computeChecksum(final ByteBuffer buffer, final int length) {

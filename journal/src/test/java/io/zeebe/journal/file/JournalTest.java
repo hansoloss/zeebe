@@ -18,14 +18,11 @@ package io.zeebe.journal.file;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.atomix.utils.serializer.Namespace;
-import io.atomix.utils.serializer.Namespaces;
 import io.zeebe.journal.Journal;
 import io.zeebe.journal.JournalReader;
 import io.zeebe.journal.JournalRecord;
 import io.zeebe.journal.StorageException.InvalidChecksum;
 import io.zeebe.journal.StorageException.InvalidIndex;
-import io.zeebe.journal.file.record.PersistedJournalRecord;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,14 +35,7 @@ import org.junit.jupiter.api.io.TempDir;
 public class JournalTest {
 
   @TempDir Path directory;
-  private final Namespace namespace =
-      new Namespace.Builder()
-          .register(Namespaces.BASIC)
-          .nextId(Namespaces.BEGIN_USER_CUSTOM_ID)
-          .register(PersistedJournalRecord.class)
-          .register(UnsafeBuffer.class)
-          .name("Journal")
-          .build();
+
   private byte[] entry;
   private final DirectBuffer data = new UnsafeBuffer();
   private Journal journal;
@@ -55,9 +45,7 @@ public class JournalTest {
     entry = "TestData".getBytes();
     data.wrap(entry);
 
-    final int entrySize = getSerializedSize(data);
-    final int entriesPerSegment = 10;
-    journal = openJournal(entrySize, entriesPerSegment);
+    journal = openJournal();
   }
 
   @Test
@@ -325,7 +313,7 @@ public class JournalTest {
 
     // when
     final var invalidChecksumRecord =
-        new PersistedJournalRecord(record.index(), record.asqn(), -1, record.data());
+        new TestJournalRecord(record.index(), record.asqn(), -1, record.data());
 
     // then
     assertThatThrownBy(() -> receiverJournal.append(invalidChecksumRecord))
@@ -366,7 +354,7 @@ public class JournalTest {
     final var appendedRecord = journal.append(data);
     journal.close();
     assertThat(journal.isOpen()).isFalse();
-    journal = openJournal(getSerializedSize(data), 2);
+    journal = openJournal();
     final JournalReader reader = journal.openReader();
 
     // then
@@ -375,15 +363,9 @@ public class JournalTest {
     assertThat(reader.next()).isEqualTo(appendedRecord);
   }
 
-  private int getSerializedSize(final DirectBuffer data) {
-    return namespace.serialize(new PersistedJournalRecord(1, 1, Integer.MAX_VALUE, data)).length
-        + Integer.BYTES;
-  }
-
-  private SegmentedJournal openJournal(final int entrySize, final int entriesPerSegment) {
+  private SegmentedJournal openJournal() {
     return SegmentedJournal.builder()
         .withDirectory(directory.resolve("data").toFile())
-        .withMaxSegmentSize(entriesPerSegment * entrySize + JournalSegmentDescriptor.BYTES)
         .withJournalIndexDensity(5)
         .build();
   }

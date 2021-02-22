@@ -40,7 +40,7 @@ class MappedJournalSegmentReader {
       final JournalIndex index) {
     this.index = index;
     this.segment = segment;
-    recordReader = new JournalRecordReaderUtil(maxEntrySize);
+    recordReader = new JournalRecordReaderUtil();
     buffer =
         IoUtil.mapExistingFile(
             file.file(), MapMode.READ_ONLY, file.name(), 0, segment.descriptor().maxSegmentSize());

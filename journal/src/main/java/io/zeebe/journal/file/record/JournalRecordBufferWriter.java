@@ -27,5 +27,5 @@ public interface JournalRecordBufferWriter {
    * @param record to write
    * @param buffer to which the record will be written
    */
-  void write(JournalRecord record, ByteBuffer buffer);
+  JournalRecord write(JournalRecord record, ByteBuffer buffer);
 }

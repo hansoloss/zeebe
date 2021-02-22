@@ -20,18 +20,16 @@ import io.zeebe.journal.file.ChecksumGenerator;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
-/**
- * Common methods used by SegmentWriter and MappedJournalSegmentReader to read records from a
- * buffer.
- */
+/** Common methods used by SegmentWriter and SegmentReader to read records from a buffer. */
 public final class JournalRecordReaderUtil {
-  private final JournalRecordBufferReader serializer = new KryoSerializer();
 
-  private final int maxEntrySize;
-  private final ChecksumGenerator checksumGenerator = new ChecksumGenerator();
+  private final ChecksumGenerator checksumGenerator;
 
-  public JournalRecordReaderUtil(final int maxEntrySize) {
-    this.maxEntrySize = maxEntrySize;
+  private final JournalRecordBufferReader serializer;
+
+  public JournalRecordReaderUtil() {
+    checksumGenerator = new ChecksumGenerator();
+    serializer = new SBESerializer(checksumGenerator);
   }
 
   /**
@@ -46,11 +44,10 @@ public final class JournalRecordReaderUtil {
       // Read the length of the record.
 
       final JournalRecord record = serializer.read(buffer);
-      if (expectedIndex != record.index()) {
+      if (record != null && expectedIndex != record.index()) {
         buffer.reset();
         return null;
       }
-      buffer.mark();
       return record;
 
     } catch (final BufferUnderflowException e) {
