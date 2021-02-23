@@ -165,7 +165,7 @@ class MappedJournalSegmentWriter {
     // Read the entry length.
     buffer.mark();
     try {
-      while (nextIndex <= index) {
+      while (index == 0 || nextIndex <= index) {
         final var nextEntry = recordUtil.read(buffer, nextIndex);
         if (nextEntry == null) {
           break;
