@@ -361,6 +361,23 @@ public class JournalTest {
   }
 
   @Test
+  public void shouldReopenJournalWithExistingRecords() throws Exception {
+    // given
+    journal.append(data);
+    journal.append(data);
+    final long lastIndexBeforeClose = journal.getLastIndex();
+    assertThat(lastIndexBeforeClose).isEqualTo(2);
+    journal.close();
+    assertThat(journal.isOpen()).isFalse();
+
+    // when
+    journal = openJournal(getSerializedSize(data), 2);
+
+    // then
+    assertThat(journal.getLastIndex()).isEqualTo(lastIndexBeforeClose);
+  }
+
+  @Test
   public void shouldReadReopenedJournal() throws Exception {
     // when
     final var appendedRecord = journal.append(data);
@@ -373,6 +390,31 @@ public class JournalTest {
     assertThat(journal.isOpen()).isTrue();
     assertThat(reader.hasNext()).isTrue();
     assertThat(reader.next()).isEqualTo(appendedRecord);
+  }
+
+  @Test
+  public void shouldWriteToReopenedJournalAtNextIndex() throws Exception {
+    // given
+    final var firstRecord = journal.append(data);
+    journal.close();
+    assertThat(journal.isOpen()).isFalse();
+
+    // when
+    journal = openJournal(getSerializedSize(data), 2);
+    final var secondRecord = journal.append(data);
+
+    // then
+    assertThat(secondRecord.index()).isEqualTo(2);
+
+    final JournalReader reader = journal.openReader();
+    assertThat(journal.isOpen()).isTrue();
+    // should read first record
+    assertThat(reader.hasNext()).isTrue();
+    assertThat(reader.next()).isEqualTo(firstRecord);
+
+    // should read second record
+    assertThat(reader.hasNext()).isTrue();
+    assertThat(reader.next()).isEqualTo(secondRecord);
   }
 
   private int getSerializedSize(final DirectBuffer data) {

@@ -178,17 +178,16 @@ class MappedJournalSegmentWriter {
 
     // Clear the buffer indexes.
     buffer.position(JournalSegmentDescriptor.BYTES);
-
-    // Read the entry length.
     buffer.mark();
     try {
-      while (nextIndex <= index) {
+      while (index == 0 || nextIndex <= index) {
         final var nextEntry = recordUtil.read(buffer, nextIndex);
         if (nextEntry == null) {
           break;
         }
         lastEntry = nextEntry;
         nextIndex++;
+        buffer.mark();
       }
     } catch (final BufferUnderflowException e) {
       // Reached end of the segment
