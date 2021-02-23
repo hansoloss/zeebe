@@ -46,5 +46,4 @@ public interface JournalRecord {
    * @return data
    */
   DirectBuffer data();
-
 }
